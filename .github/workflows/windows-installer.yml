@@ -25,11 +25,11 @@ jobs:
       - name: Decode and extract NEXUS source
         shell: pwsh
         run: |
-          $encoded = [IO.File]::ReadAllText((Join-Path $env:GITHUB_WORKSPACE 'NexusLauncher_0.5.1_Source.tar.gz.b64')).Trim()
+          $encoded = [IO.File]::ReadAllText((Join-Path $env:GITHUB_WORKSPACE 'NexusLauncher_0.5.1_Source.tar.bz2.b64')).Trim()
           if ([string]::IsNullOrWhiteSpace($encoded)) { throw 'NEXUS source bundle is empty.' }
-          $archive = Join-Path $env:GITHUB_WORKSPACE 'NexusLauncher_0.5.1_Source.tar.gz'
+          $archive = Join-Path $env:GITHUB_WORKSPACE 'NexusLauncher_0.5.1_Source.tar.bz2'
           [IO.File]::WriteAllBytes($archive, [Convert]::FromBase64String($encoded))
-          python -c "import tarfile; tarfile.open(r'$archive', 'r:gz').extractall(r'$env:GITHUB_WORKSPACE', filter='data')"
+          python -c "import tarfile; tarfile.open(r'$archive', 'r:bz2').extractall(r'$env:GITHUB_WORKSPACE', filter='data')"
           if (-not (Test-Path (Join-Path $env:GITHUB_WORKSPACE 'NexusLauncher/NexusLauncher.csproj'))) {
             throw 'NexusLauncher project was not found after extracting the source bundle.'
           }
