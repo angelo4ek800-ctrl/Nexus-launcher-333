@@ -124,21 +124,15 @@ jobs:
           python 'build/apply_version_picker.py'
           if (-not (Test-Path 'NexusLauncher/MinecraftVersionPickerWindow.cs')) { throw 'Version picker source was not created.' }
           if (-not (Select-String -Path 'NexusLauncher/MainWindow.xaml' -Pattern 'VersionPicker_Click' -Quiet)) { throw 'Version picker button was not connected.' }
+      - name: Prevent concurrent library writes and duplicate launches
+        shell: pwsh
+        run: |
+          python 'build/apply_download_lock.py'
+          if (-not (Select-String -Path 'NexusLauncher/Services/MinecraftRuntimeService.cs' -Pattern 'LibraryDownloadLocks' -Quiet)) { throw 'Library download lock was not applied.' }
       - name: Install .NET 8 SDK
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
-
-      - name: Export runtime source for download concurrency fix
-        shell: pwsh
-        run: |
-          Compress-Archive -Path 'NexusLauncher/Services/*.cs','NexusLauncher/MainWindow.xaml.cs','NexusLauncher/NexusLauncher.csproj' -DestinationPath 'NexusLauncher-runtime-source.zip' -Force
-      - name: Upload runtime source
-        uses: actions/upload-artifact@v4
-        with:
-          name: NexusLauncher-runtime-source
-          path: NexusLauncher-runtime-source.zip
-          retention-days: 1
 
       - name: Validate source
         shell: pwsh
