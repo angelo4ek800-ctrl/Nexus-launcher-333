@@ -46,6 +46,19 @@ jobs:
           $buildText = $buildText.Replace('$env:ProgramFiles(x86)', '${env:ProgramFiles(x86)}')
           [IO.File]::WriteAllText($buildScript, $buildText, [Text.UTF8Encoding]::new($false))
 
+      - name: Export launcher UI sources for version selector update
+        shell: pwsh
+        run: |
+          $files = Get-ChildItem -LiteralPath 'NexusLauncher' -Recurse -File | Where-Object { $_.Extension -in @('.cs', '.xaml', '.csproj') }
+          if (-not $files) { throw 'No launcher source files found.' }
+          Compress-Archive -Path $files.FullName -DestinationPath 'NexusLauncher-UI-sources.zip' -Force
+      - name: Upload launcher UI sources
+        uses: actions/upload-artifact@v4
+        with:
+          name: NexusLauncher-UI-sources
+          path: NexusLauncher-UI-sources.zip
+          retention-days: 1
+
       - name: Apply samurai theme, offline login and uninstall cleanup
         shell: pwsh
         run: |
