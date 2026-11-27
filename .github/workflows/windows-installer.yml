@@ -50,7 +50,7 @@ jobs:
         shell: pwsh
         run: |
           $parts = @(Get-ChildItem -LiteralPath $env:GITHUB_WORKSPACE -Filter 'NexusUI_patch_*.b64' | Sort-Object Name)
-          if ($parts.Count -ne 4) { throw "Expected 4 patch parts, found $($parts.Count)." }
+          if ($parts.Count -ne 17) { throw "Expected 17 patch parts, found $($parts.Count)." }
           $builder = [System.Text.StringBuilder]::new()
           foreach ($part in $parts) {
             $piece = (Get-Content -Raw -LiteralPath $part.FullName).Trim()
