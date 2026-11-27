@@ -118,6 +118,19 @@ jobs:
           if (-not $main.Contains($oldLaunch)) { throw 'Could not locate Minecraft launch insertion point.' }
           $main = $main.Replace($oldLaunch, $newLaunch)
           [IO.File]::WriteAllText($mainPath, $main, [Text.UTF8Encoding]::new($false))
+      - name: Export post-theme MainWindow markup
+        shell: pwsh
+        run: |
+          Copy-Item 'NexusLauncher/MainWindow.xaml' 'MainWindow-post-theme.xaml'
+          Copy-Item 'NexusLauncher/MainWindow.xaml.cs' 'MainWindow-post-theme.xaml.cs'
+      - name: Upload post-theme markup
+        uses: actions/upload-artifact@v4
+        with:
+          name: NexusLauncher-post-theme-markup
+          path: |
+            MainWindow-post-theme.xaml
+            MainWindow-post-theme.xaml.cs
+          retention-days: 1
       - name: Add searchable Minecraft version picker
         shell: pwsh
         run: |
