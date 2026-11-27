@@ -50,7 +50,7 @@ jobs:
         shell: pwsh
         run: |
           $parts = @(Get-ChildItem -LiteralPath $env:GITHUB_WORKSPACE -Filter 'NexusUI_patch_*.b64' | Sort-Object Name)
-          if ($parts.Count -ne 2) { throw "Expected 2 patch parts, found $($parts.Count)." }
+          if ($parts.Count -ne 4) { throw "Expected 4 patch parts, found $($parts.Count)." }
           $builder = [System.Text.StringBuilder]::new()
           foreach ($part in $parts) {
             $piece = (Get-Content -Raw -LiteralPath $part.FullName).Trim()
@@ -58,11 +58,9 @@ jobs:
           }
           $encoded = $builder.ToString()
           if (($encoded.Length % 4) -ne 0) { throw "Invalid patch base64 length." }
-          $patchArchive = Join-Path $env:GITHUB_WORKSPACE 'NexusSamurai.patch.bz2'
+          $patchArchive = Join-Path $env:GITHUB_WORKSPACE 'NexusSamurai.patch.tar.bz2'
           [IO.File]::WriteAllBytes($patchArchive, [Convert]::FromBase64String($encoded))
-          python -c "import bz2,pathlib; pathlib.Path('NexusSamurai.patch').write_bytes(bz2.decompress(pathlib.Path(r'$patchArchive').read_bytes()))"
-          git apply --check NexusSamurai.patch
-          git apply NexusSamurai.patch
+          python -c "import tarfile; tarfile.open(r'$patchArchive', 'r:bz2').extractall(r'$env:GITHUB_WORKSPACE', filter='data')"
           if ((Select-String -Path 'NexusLauncher/MainWindow.xaml' -Pattern 'LetterSpacing' -Quiet)) {
             throw 'Unsupported WPF LetterSpacing property remains in MainWindow.xaml.'
           }
