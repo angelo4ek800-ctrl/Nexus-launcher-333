@@ -54,7 +54,18 @@ jobs:
           $builder = [System.Text.StringBuilder]::new()
           foreach ($part in $parts) {
             $piece = (Get-Content -Raw -LiteralPath $part.FullName).Trim()
-            if ($piece -notmatch '^[A-Za-z0-9+/]+={0,2}
+            [void]$builder.Append($piece)
+          }
+          $encoded = $builder.ToString()
+          if (($encoded.Length % 4) -ne 0) { throw "Invalid patch base64 length." }
+          $patchArchive = Join-Path $env:GITHUB_WORKSPACE 'NexusSamurai.patch.bz2'
+          [IO.File]::WriteAllBytes($patchArchive, [Convert]::FromBase64String($encoded))
+          python -c "import bz2,pathlib; pathlib.Path('NexusSamurai.patch').write_bytes(bz2.decompress(pathlib.Path(r'$patchArchive').read_bytes()))"
+          git apply --check NexusSamurai.patch
+          git apply NexusSamurai.patch
+          if ((Select-String -Path 'NexusLauncher/MainWindow.xaml' -Pattern 'LetterSpacing' -Quiet)) {
+            throw 'Unsupported WPF LetterSpacing property remains in MainWindow.xaml.'
+          }
 
       - name: Install .NET 8 SDK
         uses: actions/setup-dotnet@v4
