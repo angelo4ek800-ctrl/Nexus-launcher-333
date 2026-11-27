@@ -4,9 +4,7 @@ NEXUS LAUNCHER is a Windows 10/11 x64 WPF Minecraft launcher built with .NET 8.
 
 ## Build the Windows installer
 
-The source project is stored in `NexusLauncher_0.5.1_Source.zip` in this repository. GitHub Actions extracts it, runs the static source validator, publishes a self-contained Windows x64 application, and creates:
-
-`NexusLauncherSetup.exe`
+The complete source project is stored in `NexusLauncher_0.5.1_Source.tar.gz.b64` in this repository. GitHub Actions decodes and extracts it, runs the static source validator, publishes a self-contained Windows x64 application, and creates `NexusLauncherSetup.exe`.
 
 To start a build manually, open **Actions → Build NEXUS Windows installer → Run workflow**. Pushes to `main` also trigger a build. The installer is attached to a GitHub Release when a `v*` tag is pushed.
 
