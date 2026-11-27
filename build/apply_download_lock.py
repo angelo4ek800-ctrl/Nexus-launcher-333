@@ -3,37 +3,75 @@ from pathlib import Path
 runtime_path = Path("NexusLauncher/Services/MinecraftRuntimeService.cs")
 runtime = runtime_path.read_text(encoding="utf-8")
 if "using System.Collections.Concurrent;" not in runtime:
-    runtime = "using System.Collections.Concurrent;\n" + runtime
+    runtime = "using System.Collections.Concurrent;\nusing System.Text;\n" + runtime
 class_marker = "public sealed class MinecraftRuntimeService\n{\n"
 assert class_marker in runtime
-if "LibraryDownloadLocks" not in runtime:
-    runtime = runtime.replace(class_marker, class_marker + "    private static readonly ConcurrentDictionary<string, SemaphoreSlim> LibraryDownloadLocks = new(StringComparer.OrdinalIgnoreCase);\n", 1)
-old = '''        if (!await IsValidAsync(target, hash, size, ct))
+if "DownloadPathLocks" not in runtime:
+    runtime = runtime.replace(
+        class_marker,
+        class_marker + """    private static readonly ConcurrentDictionary<string, SemaphoreSlim> DownloadPathLocks = new(StringComparer.OrdinalIgnoreCase);
+
+    // FileShare.None coordinates downloads between separate NEXUS processes too.
+    private static async Task<FileStream> AcquireDownloadPathLockAsync(string target, CancellationToken ct)
+    {
+        var normalized = Path.GetFullPath(target);
+        var key = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(normalized.ToUpperInvariant())));
+        var lockDirectory = Path.Combine(Path.GetTempPath(), "NEXUS", "download-locks");
+        Directory.CreateDirectory(lockDirectory);
+        var lockPath = Path.Combine(lockDirectory, key + ".lock");
+        while (true)
         {
-            progress?.Report("Загрузка библиотеки: " + Path.GetFileName(target));
-            await DownloadVerifiedAsync(url, target, hash, size, progress, ct);
+            ct.ThrowIfCancellationRequested();
+            try
+            {
+                return new FileStream(lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None,
+                    1, FileOptions.DeleteOnClose);
+            }
+            catch (IOException)
+            {
+                await Task.Delay(200, ct);
+            }
         }
-        return target;'''
-new = '''        // Multiple launch/install actions can request the same library at once.
-        // Serialize by canonical destination and re-check after entering the gate.
-        var gateKey = Path.GetFullPath(target);
-        var gate = LibraryDownloadLocks.GetOrAdd(gateKey, static _ => new SemaphoreSlim(1, 1));
+    }
+""",
+        1
+    )
+
+start = runtime.index("    private static async Task DownloadVerifiedAsync(")
+end = runtime.index("    private static async Task<bool> IsValidAsync(", start)
+method = runtime[start:end]
+if "DownloadPathLocks.GetOrAdd" not in method:
+    old_head = """    {
+        const long maximumBytes = 2_000_000_000;"""
+    new_head = """    {
+        var fullTarget = Path.GetFullPath(target);
+        var gate = DownloadPathLocks.GetOrAdd(fullTarget, static _ => new SemaphoreSlim(1, 1));
         await gate.WaitAsync(ct);
         try
         {
-            if (!await IsValidAsync(target, hash, size, ct))
-            {
-                progress?.Report("Загрузка библиотеки: " + Path.GetFileName(target));
-                await DownloadVerifiedAsync(url, target, hash, size, progress, ct);
-            }
-            return target;
+            // A previous launcher process may already have completed this download.
+            await using var fileLock = await AcquireDownloadPathLockAsync(fullTarget, ct);
+            if (await IsValidAsync(fullTarget, sha1, expectedSize, ct)) return;
+        const long maximumBytes = 2_000_000_000;"""
+    assert old_head in method, "Download method start not found"
+    method = method.replace(old_head, new_head, 1)
+    old_tail = """        }, Path.GetFileName(target), progress, ct);
+    }
+
+"""
+    new_tail = """        }, Path.GetFileName(target), progress, ct);
         }
         finally
         {
             gate.Release();
-        }'''
-assert old in runtime, "Library download block not found"
-runtime = runtime.replace(old, new, 1)
+        }
+    }
+
+"""
+    assert old_tail in method, "Download method end not found"
+    method = method.replace(old_tail, new_tail, 1)
+    runtime = runtime[:start] + method + runtime[end:]
+
 runtime_path.write_text(runtime, encoding="utf-8")
 
 main_path = Path("NexusLauncher/MainWindow.xaml.cs")
@@ -42,26 +80,36 @@ if "private bool _launchInProgress;" not in main:
     marker = "public partial class MainWindow : Window\n{\n"
     assert marker in main
     main = main.replace(marker, marker + "    private bool _launchInProgress;\n", 1)
-old_start = '''    private async void Launch_Click(object sender, RoutedEventArgs e)
+
+old_start = """    private async void Launch_Click(object sender, RoutedEventArgs e)
     {
-        var account = _offlineMode ? _offlineAccount : AccountBox.SelectedItem as ElyAccount;'''
-new_start = '''    private async void Launch_Click(object sender, RoutedEventArgs e)
+        var account = _offlineMode ? _offlineAccount : AccountBox.SelectedItem as ElyAccount;
+        if (account is null) { Log("Сначала выбери Ely.by или введи ник и нажми «Офлайн-вход»."); return; }
+        try"""
+new_start = """    private async void Launch_Click(object sender, RoutedEventArgs e)
     {
         if (_launchInProgress)
         {
             Log("Запуск уже выполняется. Дождись завершения текущей операции.");
             return;
         }
+        var account = _offlineMode ? _offlineAccount : AccountBox.SelectedItem as ElyAccount;
+        if (account is null) { Log("Сначала выбери Ely.by или введи ник и нажми «Офлайн-вход»."); return; }
         _launchInProgress = true;
-        var account = _offlineMode ? _offlineAccount : AccountBox.SelectedItem as ElyAccount;'''
-assert old_start in main, "Launch_Click start not found"
-main = main.replace(old_start, new_start, 1)
-old_finally = '''        finally { EndProgress(); }
+        try"""
+if old_start in main:
+    main = main.replace(old_start, new_start, 1)
+elif "Запуск уже выполняется. Дождись завершения текущей операции." not in main:
+    raise AssertionError("Launch_Click start not found")
+
+old_finally = """        finally { EndProgress(); }
     }
-    private static int JavaVersionNumber'''
-new_finally = '''        finally { EndProgress(); _launchInProgress = false; }
+    private static int JavaVersionNumber"""
+new_finally = """        finally { EndProgress(); _launchInProgress = false; }
     }
-    private static int JavaVersionNumber'''
-assert old_finally in main, "Launch_Click finally block not found"
-main = main.replace(old_finally, new_finally, 1)
+    private static int JavaVersionNumber"""
+if old_finally in main:
+    main = main.replace(old_finally, new_finally, 1)
+elif "_launchInProgress = false;" not in main:
+    raise AssertionError("Launch_Click finally not found")
 main_path.write_text(main, encoding="utf-8")
