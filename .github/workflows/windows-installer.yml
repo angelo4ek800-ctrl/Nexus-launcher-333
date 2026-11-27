@@ -61,6 +61,7 @@ jobs:
           $patchArchive = Join-Path $env:GITHUB_WORKSPACE 'NexusSamurai.patch.tar.bz2'
           [IO.File]::WriteAllBytes($patchArchive, [Convert]::FromBase64String($encoded))
           python -c "import tarfile; tarfile.open(r'$patchArchive', 'r:bz2').extractall(r'$env:GITHUB_WORKSPACE', filter='data')"
+          python -c 'from pathlib import Path; p=Path("NexusLauncher/MainWindow.xaml.cs"); s=p.read_text(encoding="utf-8"); old="            MessageBox.Show("+chr(10)+"                "+chr(34)+"Помести полный набор DLL"; new="            if (MessageBox.Show("+chr(10)+"                "+chr(34)+"Помести полный набор DLL"; assert old in s; p.write_text(s.replace(old,new,1),encoding="utf-8")'
           if ((Select-String -Path 'NexusLauncher/MainWindow.xaml' -Pattern 'LetterSpacing' -Quiet)) {
             throw 'Unsupported WPF LetterSpacing property remains in MainWindow.xaml.'
           }
