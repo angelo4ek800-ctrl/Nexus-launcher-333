@@ -46,6 +46,26 @@ jobs:
           $buildText = $buildText.Replace('$env:ProgramFiles(x86)', '${env:ProgramFiles(x86)}')
           [IO.File]::WriteAllText($buildScript, $buildText, [Text.UTF8Encoding]::new($false))
 
+      - name: Apply redesigned UI
+        shell: pwsh
+        run: |
+          $parts = @(Get-ChildItem -LiteralPath $env:GITHUB_WORKSPACE -Filter 'NexusUI_patch_*.b64' | Sort-Object Name)
+          if ($parts.Count -ne 2) { throw "Expected 2 UI patch parts, found $($parts.Count)." }
+          $builder = [System.Text.StringBuilder]::new()
+          foreach ($part in $parts) {
+            $piece = (Get-Content -Raw -LiteralPath $part.FullName).Trim()
+            if ($piece -notmatch '^[A-Za-z0-9+/]+={0,2}$') { throw "Invalid base64 characters in $($part.Name)." }
+            [void]$builder.Append($piece)
+          }
+          $encoded = $builder.ToString()
+          if (($encoded.Length % 4) -ne 0) { throw "Invalid UI patch base64 length." }
+          $patch = Join-Path $env:GITHUB_WORKSPACE 'NexusUI.patch.tar.bz2'
+          [IO.File]::WriteAllBytes($patch, [Convert]::FromBase64String($encoded))
+          python -c "import tarfile; tarfile.open(r'$patch', 'r:bz2').extractall(r'$env:GITHUB_WORKSPACE', filter='data')"
+          if ((Select-String -Path 'NexusLauncher/MainWindow.xaml' -Pattern 'LetterSpacing' -Quiet)) {
+            throw 'Unsupported WPF LetterSpacing property remains in MainWindow.xaml.'
+          }
+
       - name: Install .NET 8 SDK
         uses: actions/setup-dotnet@v4
         with:
