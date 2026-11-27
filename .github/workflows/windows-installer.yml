@@ -128,7 +128,7 @@ jobs:
         shell: pwsh
         run: |
           python 'build/apply_download_lock.py'
-          if (-not (Select-String -Path 'NexusLauncher/Services/MinecraftRuntimeService.cs' -Pattern 'LibraryDownloadLocks' -Quiet)) { throw 'Library download lock was not applied.' }
+          if (-not (Select-String -Path 'NexusLauncher/Services/MinecraftRuntimeService.cs' -Pattern 'DownloadPathLocks' -Quiet)) { throw 'Library download lock was not applied.' }
       - name: Install .NET 8 SDK
         uses: actions/setup-dotnet@v4
         with:
