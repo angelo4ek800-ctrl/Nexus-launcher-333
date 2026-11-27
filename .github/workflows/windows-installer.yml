@@ -12,10 +12,20 @@ permissions:
 jobs:
   build-installer:
     runs-on: windows-latest
-    timeout-minutes: 35
+    timeout-minutes: 45
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Extract launcher source
+        shell: pwsh
+        run: |
+          $archive = Join-Path $env:GITHUB_WORKSPACE 'NexusLauncher_0.5.1_Source.zip'
+          if (-not (Test-Path $archive)) { throw "Source archive not found: $archive" }
+          Expand-Archive -LiteralPath $archive -DestinationPath $env:GITHUB_WORKSPACE -Force
+          if (-not (Test-Path (Join-Path $env:GITHUB_WORKSPACE 'NexusLauncher/NexusLauncher.csproj'))) {
+            throw 'NexusLauncher project was not found after extracting the source archive.'
+          }
 
       - name: Install Python
         uses: actions/setup-python@v5
@@ -36,12 +46,12 @@ jobs:
         shell: pwsh
         run: |
           $iscc = @(
-            "$env:ProgramFiles(x86)\\Inno Setup 6\\ISCC.exe",
-            "$env:ProgramFiles\\Inno Setup 6\\ISCC.exe"
+            "$env:ProgramFiles(x86)\Inno Setup 6\ISCC.exe",
+            "$env:ProgramFiles\Inno Setup 6\ISCC.exe"
           ) | Where-Object { Test-Path $_ } | Select-Object -First 1
           if (-not $iscc) {
             choco install innosetup --yes --no-progress
-            $iscc = "$env:ProgramFiles(x86)\\Inno Setup 6\\ISCC.exe"
+            $iscc = "$env:ProgramFiles(x86)\Inno Setup 6\ISCC.exe"
           }
           if (-not (Test-Path $iscc)) { throw 'Inno Setup 6 compiler was not found.' }
           "ISCC_PATH=$iscc" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
