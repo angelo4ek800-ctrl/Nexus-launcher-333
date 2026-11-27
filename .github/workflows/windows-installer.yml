@@ -106,20 +106,10 @@ jobs:
           Set-Content -LiteralPath 'NexusLauncher/Services/PerformanceOptimizationService.cs' -Value $service -Encoding utf8
           $launchPath = 'NexusLauncher/Services/MinecraftLaunchService.cs'
           $launch = [IO.File]::ReadAllText($launchPath)
-          $oldArgs = @'
-                  start.ArgumentList.Add("-Xms512M");
-                  start.ArgumentList.Add("-Xmx" + memoryMb + "M");
-                  start.ArgumentList.Add("-Djava.library.path=" + nativesDir + Path.PathSeparator + javaBinDirectory);
-          '@
-          $newArgs = @'
-                  start.ArgumentList.Add("-Xms512M");
-                  start.ArgumentList.Add("-Xmx" + memoryMb + "M");
-                  foreach (var optimizationArgument in PerformanceOptimizationService.GetJvmArguments())
-                      start.ArgumentList.Add(optimizationArgument);
-                  start.ArgumentList.Add("-Djava.library.path=" + nativesDir + Path.PathSeparator + javaBinDirectory);
-          '@
-          if (-not $launch.Contains($oldArgs)) { throw 'Could not locate JVM argument insertion point.' }
-          $launch = $launch.Replace($oldArgs, $newArgs)
+          $oldLine = '        start.ArgumentList.Add("-Xmx" + memoryMb + "M");'
+          $newLines = $oldLine + [Environment]::NewLine + '        foreach (var optimizationArgument in PerformanceOptimizationService.GetJvmArguments())' + [Environment]::NewLine + '            start.ArgumentList.Add(optimizationArgument);'
+          if (-not $launch.Contains($oldLine)) { throw 'Could not locate JVM argument insertion point.' }
+          $launch = $launch.Replace($oldLine, $newLines)
           [IO.File]::WriteAllText($launchPath, $launch, [Text.UTF8Encoding]::new($false))
           $mainPath = 'NexusLauncher/MainWindow.xaml.cs'
           $main = [IO.File]::ReadAllText($mainPath)
