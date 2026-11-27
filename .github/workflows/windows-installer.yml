@@ -129,6 +129,17 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
+      - name: Export runtime source for download concurrency fix
+        shell: pwsh
+        run: |
+          Compress-Archive -Path 'NexusLauncher/Services/*.cs','NexusLauncher/MainWindow.xaml.cs','NexusLauncher/NexusLauncher.csproj' -DestinationPath 'NexusLauncher-runtime-source.zip' -Force
+      - name: Upload runtime source
+        uses: actions/upload-artifact@v4
+        with:
+          name: NexusLauncher-runtime-source
+          path: NexusLauncher-runtime-source.zip
+          retention-days: 1
+
       - name: Validate source
         shell: pwsh
         working-directory: NexusLauncher
