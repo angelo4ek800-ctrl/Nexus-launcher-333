@@ -41,6 +41,10 @@ jobs:
           if (-not (Test-Path (Join-Path $env:GITHUB_WORKSPACE 'NexusLauncher/NexusLauncher.csproj'))) {
             throw 'NexusLauncher project was not found after extracting the source archive.'
           }
+          $buildScript = Join-Path $env:GITHUB_WORKSPACE 'NexusLauncher/build-installer.ps1'
+          $buildText = [IO.File]::ReadAllText($buildScript)
+          $buildText = $buildText.Replace('$env:ProgramFiles(x86)', '${env:ProgramFiles(x86)}')
+          [IO.File]::WriteAllText($buildScript, $buildText, [Text.UTF8Encoding]::new($false))
 
       - name: Install .NET 8 SDK
         uses: actions/setup-dotnet@v4
@@ -55,13 +59,14 @@ jobs:
       - name: Install Inno Setup 6
         shell: pwsh
         run: |
+          $programFilesX86 = ${env:ProgramFiles(x86)}
           $iscc = @(
-            "$env:ProgramFiles(x86)\Inno Setup 6\ISCC.exe",
+            "$programFilesX86\Inno Setup 6\ISCC.exe",
             "$env:ProgramFiles\Inno Setup 6\ISCC.exe"
           ) | Where-Object { Test-Path $_ } | Select-Object -First 1
           if (-not $iscc) {
             choco install innosetup --yes --no-progress
-            $iscc = "$env:ProgramFiles(x86)\Inno Setup 6\ISCC.exe"
+            $iscc = "$programFilesX86\Inno Setup 6\ISCC.exe"
           }
           if (-not (Test-Path $iscc)) { throw 'Inno Setup 6 compiler was not found.' }
           "ISCC_PATH=$iscc" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
