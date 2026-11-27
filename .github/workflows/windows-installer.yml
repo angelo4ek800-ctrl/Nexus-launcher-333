@@ -1,0 +1,67 @@
+name: Build NEXUS Windows installer
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build-installer:
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install .NET 8 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Validate source
+        shell: pwsh
+        working-directory: NexusLauncher
+        run: python tools/validate-project.py
+
+      - name: Install Inno Setup 6
+        shell: pwsh
+        run: |
+          $iscc = @(
+            "$env:ProgramFiles(x86)\\Inno Setup 6\\ISCC.exe",
+            "$env:ProgramFiles\\Inno Setup 6\\ISCC.exe"
+          ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $iscc) {
+            choco install innosetup --yes --no-progress
+            $iscc = "$env:ProgramFiles(x86)\\Inno Setup 6\\ISCC.exe"
+          }
+          if (-not (Test-Path $iscc)) { throw 'Inno Setup 6 compiler was not found.' }
+          "ISCC_PATH=$iscc" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Publish app and compile installer
+        shell: pwsh
+        working-directory: NexusLauncher
+        run: ./build-installer.ps1
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NexusLauncherSetup-Windows-x64
+          path: NexusLauncher/dist/installer/NexusLauncherSetup.exe
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Attach installer to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: NexusLauncher/dist/installer/NexusLauncherSetup.exe
+          generate_release_notes: true
