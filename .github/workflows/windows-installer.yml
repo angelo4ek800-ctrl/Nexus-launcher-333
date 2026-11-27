@@ -46,19 +46,6 @@ jobs:
           $buildText = $buildText.Replace('$env:ProgramFiles(x86)', '${env:ProgramFiles(x86)}')
           [IO.File]::WriteAllText($buildScript, $buildText, [Text.UTF8Encoding]::new($false))
 
-      - name: Export launcher UI sources for version selector update
-        shell: pwsh
-        run: |
-          $files = Get-ChildItem -LiteralPath 'NexusLauncher' -Recurse -File | Where-Object { $_.Extension -in @('.cs', '.xaml', '.csproj') }
-          if (-not $files) { throw 'No launcher source files found.' }
-          Compress-Archive -Path $files.FullName -DestinationPath 'NexusLauncher-UI-sources.zip' -Force
-      - name: Upload launcher UI sources
-        uses: actions/upload-artifact@v4
-        with:
-          name: NexusLauncher-UI-sources
-          path: NexusLauncher-UI-sources.zip
-          retention-days: 1
-
       - name: Apply samurai theme, offline login and uninstall cleanup
         shell: pwsh
         run: |
@@ -131,6 +118,12 @@ jobs:
           if (-not $main.Contains($oldLaunch)) { throw 'Could not locate Minecraft launch insertion point.' }
           $main = $main.Replace($oldLaunch, $newLaunch)
           [IO.File]::WriteAllText($mainPath, $main, [Text.UTF8Encoding]::new($false))
+      - name: Add searchable Minecraft version picker
+        shell: pwsh
+        run: |
+          python 'build/apply_version_picker.py'
+          if (-not (Test-Path 'NexusLauncher/MinecraftVersionPickerWindow.cs')) { throw 'Version picker source was not created.' }
+          if (-not (Select-String -Path 'NexusLauncher/MainWindow.xaml' -Pattern 'VersionPicker_Click' -Quiet)) { throw 'Version picker button was not connected.' }
       - name: Install .NET 8 SDK
         uses: actions/setup-dotnet@v4
         with:
