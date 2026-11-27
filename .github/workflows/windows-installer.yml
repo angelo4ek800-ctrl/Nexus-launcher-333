@@ -17,20 +17,22 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Extract launcher source
-        shell: pwsh
-        run: |
-          $archive = Join-Path $env:GITHUB_WORKSPACE 'NexusLauncher_0.5.1_Source.zip'
-          if (-not (Test-Path $archive)) { throw "Source archive not found: $archive" }
-          Expand-Archive -LiteralPath $archive -DestinationPath $env:GITHUB_WORKSPACE -Force
-          if (-not (Test-Path (Join-Path $env:GITHUB_WORKSPACE 'NexusLauncher/NexusLauncher.csproj'))) {
-            throw 'NexusLauncher project was not found after extracting the source archive.'
-          }
-
       - name: Install Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.x'
+
+      - name: Decode and extract NEXUS source
+        shell: pwsh
+        run: |
+          $encoded = [IO.File]::ReadAllText((Join-Path $env:GITHUB_WORKSPACE 'NexusLauncher_0.5.1_Source.tar.gz.b64')).Trim()
+          if ([string]::IsNullOrWhiteSpace($encoded)) { throw 'NEXUS source bundle is empty.' }
+          $archive = Join-Path $env:GITHUB_WORKSPACE 'NexusLauncher_0.5.1_Source.tar.gz'
+          [IO.File]::WriteAllBytes($archive, [Convert]::FromBase64String($encoded))
+          python -c "import tarfile; tarfile.open(r'$archive', 'r:gz').extractall(r'$env:GITHUB_WORKSPACE', filter='data')"
+          if (-not (Test-Path (Join-Path $env:GITHUB_WORKSPACE 'NexusLauncher/NexusLauncher.csproj'))) {
+            throw 'NexusLauncher project was not found after extracting the source bundle.'
+          }
 
       - name: Install .NET 8 SDK
         uses: actions/setup-dotnet@v4
