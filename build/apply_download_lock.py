@@ -72,6 +72,32 @@ if "DownloadPathLocks.GetOrAdd" not in method:
     method = method.replace(old_tail, new_tail, 1)
     runtime = runtime[:start] + method + runtime[end:]
 
+# Treat sharing violations as "not verified" so downloader can wait for the path lock.
+old_valid = """    private static async Task<bool> IsValidAsync(string path, string? sha1, long expectedSize, CancellationToken ct)
+    {
+        if (!File.Exists(path)) return false;
+        var info = new FileInfo(path);
+        if (expectedSize >= 0 && info.Length != expectedSize) return false;
+        return string.IsNullOrWhiteSpace(sha1) || await HashMatchesAsync(path, sha1, ct);
+    }
+
+"""
+new_valid = """    private static async Task<bool> IsValidAsync(string path, string? sha1, long expectedSize, CancellationToken ct)
+    {
+        try
+        {
+            if (!File.Exists(path)) return false;
+            var info = new FileInfo(path);
+            if (expectedSize >= 0 && info.Length != expectedSize) return false;
+            return string.IsNullOrWhiteSpace(sha1) || await HashMatchesAsync(path, sha1, ct);
+        }
+        catch (IOException) { return false; }
+        catch (UnauthorizedAccessException) { return false; }
+    }
+
+"""
+assert old_valid in runtime, "IsValidAsync method not found"
+runtime = runtime.replace(old_valid, new_valid, 1)
 runtime_path.write_text(runtime, encoding="utf-8")
 
 main_path = Path("NexusLauncher/MainWindow.xaml.cs")
@@ -88,6 +114,19 @@ old_start = """    private async void Launch_Click(object sender, RoutedEventArg
         try"""
 new_start = """    private async void Launch_Click(object sender, RoutedEventArgs e)
     {
+        if (_gameProcess is { } runningGame)
+        {
+            try
+            {
+                if (!runningGame.HasExited)
+                {
+                    Log("Minecraft уже запущен. Сначала закрой игру, затем запускай её снова.");
+                    return;
+                }
+            }
+            catch (InvalidOperationException) { }
+            _gameProcess = null;
+        }
         if (_launchInProgress)
         {
             Log("Запуск уже выполняется. Дождись завершения текущей операции.");
