@@ -66,6 +66,68 @@ jobs:
             throw 'Unsupported WPF LetterSpacing property remains in MainWindow.xaml.'
           }
 
+      - name: Apply built-in performance optimization
+        shell: pwsh
+        run: |
+          $service = @'
+          using System.Text;
+          namespace NexusLauncher.Services;
+          public static class PerformanceOptimizationService
+          {
+              private const string MarkerName = ".nexus-performance-v1";
+              public static void ApplyFirstRunPreset(string gameDirectory, IProgress<string>? progress = null)
+              {
+                  Directory.CreateDirectory(gameDirectory);
+                  var marker = Path.Combine(gameDirectory, MarkerName);
+                  if (File.Exists(marker)) return;
+                  var optionsPath = Path.Combine(gameDirectory, "options.txt");
+                  var lines = File.Exists(optionsPath) ? File.ReadAllLines(optionsPath, Encoding.UTF8).ToList() : new List<string>();
+                  var defaults = new Dictionary<string, string>(StringComparer.Ordinal)
+                  {
+                      ["renderDistance"] = "8", ["simulationDistance"] = "5", ["graphicsMode"] = "0",
+                      ["particles"] = "1", ["entityShadows"] = "false", ["entityDistanceScaling"] = "0.75",
+                      ["biomeBlendRadius"] = "0", ["mipmapLevels"] = "0", ["maxFps"] = "260",
+                      ["enableVsync"] = "false", ["ao"] = "0", ["cloudStatus"] = "0"
+                  };
+                  var present = new HashSet<string>(lines.Select(line => line.Split(':', 2)[0]), StringComparer.Ordinal);
+                  foreach (var pair in defaults) if (!present.Contains(pair.Key)) lines.Add(pair.Key + ":" + pair.Value);
+                  File.WriteAllLines(optionsPath, lines, new UTF8Encoding(false));
+                  File.WriteAllText(marker, "NEXUS performance preset v1" + Environment.NewLine, Encoding.UTF8);
+                  progress?.Report("Встроенная оптимизация NEXUS: применены безопасные настройки графики; существующие параметры не перезаписаны.");
+              }
+              public static IReadOnlyList<string> GetJvmArguments() => new[]
+              {
+                  "-XX:+UseG1GC", "-XX:MaxGCPauseMillis=100", "-XX:G1ReservePercent=20",
+                  "-XX:InitiatingHeapOccupancyPercent=15", "-XX:+ParallelRefProcEnabled",
+                  "-XX:+DisableExplicitGC", "-XX:+UseStringDeduplication"
+              };
+          }
+          '@
+          Set-Content -LiteralPath 'NexusLauncher/Services/PerformanceOptimizationService.cs' -Value $service -Encoding utf8
+          $launchPath = 'NexusLauncher/Services/MinecraftLaunchService.cs'
+          $launch = [IO.File]::ReadAllText($launchPath)
+          $oldArgs = @'
+                  start.ArgumentList.Add("-Xms512M");
+                  start.ArgumentList.Add("-Xmx" + memoryMb + "M");
+                  start.ArgumentList.Add("-Djava.library.path=" + nativesDir + Path.PathSeparator + javaBinDirectory);
+          '@
+          $newArgs = @'
+                  start.ArgumentList.Add("-Xms512M");
+                  start.ArgumentList.Add("-Xmx" + memoryMb + "M");
+                  foreach (var optimizationArgument in PerformanceOptimizationService.GetJvmArguments())
+                      start.ArgumentList.Add(optimizationArgument);
+                  start.ArgumentList.Add("-Djava.library.path=" + nativesDir + Path.PathSeparator + javaBinDirectory);
+          '@
+          if (-not $launch.Contains($oldArgs)) { throw 'Could not locate JVM argument insertion point.' }
+          $launch = $launch.Replace($oldArgs, $newArgs)
+          [IO.File]::WriteAllText($launchPath, $launch, [Text.UTF8Encoding]::new($false))
+          $mainPath = 'NexusLauncher/MainWindow.xaml.cs'
+          $main = [IO.File]::ReadAllText($mainPath)
+          $oldLaunch = '            await _runtime.InstallAsync(Current.GameDirectory, targetVersion, progress, OperationToken);'
+          $newLaunch = '            PerformanceOptimizationService.ApplyFirstRunPreset(Current.GameDirectory, progress);' + [Environment]::NewLine + $oldLaunch
+          if (-not $main.Contains($oldLaunch)) { throw 'Could not locate Minecraft launch insertion point.' }
+          $main = $main.Replace($oldLaunch, $newLaunch)
+          [IO.File]::WriteAllText($mainPath, $main, [Text.UTF8Encoding]::new($false))
       - name: Install .NET 8 SDK
         uses: actions/setup-dotnet@v4
         with:
